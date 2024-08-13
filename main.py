@@ -1,47 +1,31 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends
+from sqlmodel import SQLModel, Field, create_engine, Session, select
 from typing import Optional, List
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
 import uvicorn
 
-# Database URL (SQLite)
+# Database setup
 DATABASE_URL = "sqlite:///./locations.db"
+engine = create_engine(DATABASE_URL, echo=True)
 
-# Set up SQLAlchemy
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# Define the Location model as a table in the database
-class LocationModel(Base):
-    __tablename__ = "locations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    latitude = Column(String, index=True)
-    longitude = Column(String, index=True)
-    timestamp = Column(String, index=True)
+# Define the Location model
+class Location(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    latitude: str
+    longitude: str
+    timestamp: Optional[str] = None
 
 # Create the tables in the database
-Base.metadata.create_all(bind=engine)
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
 
 # FastAPI instance
 app = FastAPI()
 
 # Dependency to get the database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Pydantic model for incoming data
-class Location(BaseModel):
-    latitude: str
-    longitude: str
-    timestamp: Optional[str] = None  # Optional timestamp
+def get_session():
+    with Session(engine) as session:
+        yield session
 
 # Root route
 @app.get("/")
@@ -55,24 +39,22 @@ def favicon():
 
 # Endpoint to update location
 @app.post("/update_location", response_model=Location)
-async def update_location(location: Location, db: Session = Depends(get_db)):
-    db_location = LocationModel(
-        latitude=location.latitude,
-        longitude=location.longitude,
-        timestamp=location.timestamp,
-    )
-    db.add(db_location)
-    db.commit()
-    db.refresh(db_location)
-    return db_location
+async def update_location(location: Location, session: Session = Depends(get_session)):
+    session.add(location)
+    session.commit()
+    session.refresh(location)
+    return location
 
 # Endpoint to retrieve all locations
 @app.get("/get_locations", response_model=List[Location])
-async def get_locations(db: Session = Depends(get_db)):
-    return db.query(LocationModel).all()
+async def get_locations(session: Session = Depends(get_session)):
+    statement = select(Location)
+    results = session.exec(statement).all()
+    return results
 
 # Run the application
 def main():
+    create_db_and_tables()
     uvicorn.run('main:app', host='0.0.0.0', port=10000, reload=True)
 
 if __name__ == '__main__':

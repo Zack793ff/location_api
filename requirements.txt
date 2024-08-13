@@ -4,3 +4,4 @@ typing
 uvicorn
 sqlalchemy
 databases
+sqlmodel
