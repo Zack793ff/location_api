@@ -4,4 +4,3 @@ typing
 uvicorn
 sqlalchemy
 databases
-sqlite
