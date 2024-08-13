@@ -2,3 +2,6 @@ fastapi
 pydantic
 typing
 uvicorn
+sqllalchemy
+databases
+sqlite
